@@ -1,0 +1,140 @@
+import sqlite3
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+
+BOT_TOKEN = "8825875398:AAGjLHq1V36wO6gfvXjWPZi9j39r9Wb3y8k"
+ADMIN_ID = 8808128578
+
+conn = sqlite3.connect("referral.db", check_same_thread=False)
+cur = conn.cursor()
+
+cur.execute("""
+CREATE TABLE IF NOT EXISTS users(
+    user_id INTEGER PRIMARY KEY,
+    invited_by INTEGER,
+    referrals INTEGER DEFAULT 0
+)
+""")
+conn.commit()
+
+
+def start(update: Update, context: CallbackContext):
+    user = update.effective_user
+    uid = user.id
+
+    cur.execute("SELECT * FROM users WHERE user_id=?", (uid,))
+    if not cur.fetchone():
+
+        invited = None
+
+        if context.args:
+            try:
+                invited = int(context.args[0])
+            except:
+                invited = None
+
+        cur.execute(
+            "INSERT INTO users(user_id, invited_by, referrals) VALUES(?,?,0)",
+            (uid, invited)
+        )
+
+        if invited and invited != uid:
+            cur.execute(
+                "UPDATE users SET referrals=referrals+1 WHERE user_id=?",
+                (invited,)
+            )
+
+        conn.commit()
+
+    username = context.bot.username
+
+    link = f"https://t.me/{username}?start={uid}"
+
+    update.message.reply_text(
+        f"""👋 Welcome
+
+🔗 Your Referral Link
+
+{link}
+
+Use /myref to check referrals.
+"""
+    )
+
+
+def myref(update: Update, context: CallbackContext):
+    uid = update.effective_user.id
+
+    cur.execute(
+        "SELECT referrals FROM users WHERE user_id=?",
+        (uid,)
+    )
+
+    row = cur.fetchone()
+
+    if row:
+        total = row[0]
+    else:
+        total = 0
+
+    update.message.reply_text(
+        f"🎉 Total Referrals : {total}"
+    )
+
+
+def top(update: Update, context: CallbackContext):
+
+    cur.execute(
+        "SELECT user_id, referrals FROM users ORDER BY referrals DESC LIMIT 10"
+    )
+
+    rows = cur.fetchall()
+
+    txt = "🏆 Top Users\n\n"
+
+    n = 1
+
+    for row in rows:
+        txt += f"{n}. {row[0]} ➜ {row[1]} referrals\n"
+        n += 1
+
+    update.message.reply_text(txt)
+
+
+def stats(update: Update, context: CallbackContext):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    cur.execute("SELECT COUNT(*) FROM users")
+    users = cur.fetchone()[0]
+
+    cur.execute("SELECT SUM(referrals) FROM users")
+    refs = cur.fetchone()[0]
+
+    if refs is None:
+        refs = 0
+
+    update.message.reply_text(
+        f"""📊 BOT STATS
+
+👥 Users : {users}
+
+🎁 Referrals : {refs}
+"""
+    )
+
+
+updater = Updater(BOT_TOKEN, use_context=True)
+
+dp = updater.dispatcher
+
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("myref", myref))
+dp.add_handler(CommandHandler("top", top))
+dp.add_handler(CommandHandler("stats", stats))
+
+print("Bot Started")
+
+updater.start_polling()
+updater.idle()

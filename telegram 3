@@ -1,0 +1,86 @@
+from telegram import Update
+from telegram.ext import Updater, CommandHandler, CallbackContext
+
+from config import 8825875398:AAGjLHq1V36wO6gfvXjWPZi9j39r9Wb3y8k, 8808128578, WELCOME_TEXT
+from database import *
+
+create_tables()
+
+
+def start(update: Update, context: CallbackContext):
+    user = update.effective_user
+    user_id = user.id
+
+    if not user_exists(user_id):
+
+        ref = None
+
+        if context.args:
+            try:
+                ref = int(context.args[0])
+            except:
+                ref = None
+
+        add_user(user_id, ref)
+
+        if ref and ref != user_id:
+            add_referral(ref)
+
+    username = context.bot.username
+
+    link = f"https://t.me/{username}?start={user_id}"
+
+    update.message.reply_text(
+        WELCOME_TEXT +
+        f"\n\n🔗 Your Referral Link:\n{link}"
+    )
+
+
+def myref(update: Update, context: CallbackContext):
+    total = get_referrals(update.effective_user.id)
+    update.message.reply_text(
+        f"🎉 Your Total Referrals: {total}"
+    )
+
+
+def top(update: Update, context: CallbackContext):
+    users = top_users()
+
+    text = "🏆 Top 10 Users\n\n"
+
+    i = 1
+    for uid, refs in users:
+        text += f"{i}. {uid} ➜ {refs} referrals\n"
+        i += 1
+
+    update.message.reply_text(text)
+
+
+def stats(update: Update, context: CallbackContext):
+
+    if update.effective_user.id != ADMIN_ID:
+        return
+
+    update.message.reply_text(
+        f"""📊 Bot Stats
+
+👥 Users : {total_users()}
+
+🎁 Referrals : {total_referrals()}
+"""
+    )
+
+
+updater = Updater(BOT_TOKEN, use_context=True)
+
+dp = updater.dispatcher
+
+dp.add_handler(CommandHandler("start", start))
+dp.add_handler(CommandHandler("myref", myref))
+dp.add_handler(CommandHandler("top", top))
+dp.add_handler(CommandHandler("stats", stats))
+
+print("Referral Bot Started...")
+
+updater.start_polling()
+updater.idle()
